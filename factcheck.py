@@ -33,14 +33,14 @@ class EntailmentModel(object):
         self.cuda = cuda
 
     def check_entailment(self, premise: str, hypothesis: str):
-        with torch.no_grad():
+        with torch.no_grad(): # Disable gradient tracking for memory efficiency
             # Tokenize the premise and hypothesis
             inputs = self.tokenizer(premise, hypothesis, return_tensors='pt', truncation=True, padding=True)
             if self.cuda:
                 inputs = {key: value.to('cuda') for key, value in inputs.items()}
             # Get the model's prediction
             outputs = self.model(**inputs)
-            logits = outputs.logits
+            logits = outputs.logits # tensor of shape (batch_size, num_labels (3 labels))
 
         # Note that the labels are ["entailment", "neutral", "contradiction"]. There are a number of ways to map
         # these logits or probabilities to classification decisions; you'll have to decide how you want to do this.

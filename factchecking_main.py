@@ -143,8 +143,12 @@ if __name__=="__main__":
     elif args.mode == "entailment":
         model_name = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
         # model_name = "roberta-large-mnli"   # alternative model that you can try out if you want
-        # tokenizer is used to convert the input text to a format that the specific model can understand
-        # because each model has its own way of tokenizing text (i.e. roberta, bert, etc.)
+        '''
+        Tokenizer is used to convert the input text to a format that the specific model can understand
+        because each model has its own way of tokenizing text (i.e. roberta, bert, etc.).
+        The AutoTokenizer class is a convenient way to automatically load the correct tokenizer for 
+        the model you intend to use, without having to specify the tokenizer class manually. 
+        '''
         ent_tokenizer = AutoTokenizer.from_pretrained(model_name)
         roberta_ent_model = AutoModelForSequenceClassification.from_pretrained(model_name)
         if args.cuda:
