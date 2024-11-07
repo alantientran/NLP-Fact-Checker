@@ -45,15 +45,15 @@ class EntailmentModel(object):
         # Note that the labels are ["entailment", "neutral", "contradiction"]. There are a number of ways to map
         # these logits or probabilities to classification decisions; you'll have to decide how you want to do this.
 
-        # Get probabilities using softmax
+            # Get probabilities using softmax
             probs = torch.nn.functional.softmax(logits, dim=-1)
 
             # Find the maximum probability label
-            label_idx = torch.argmax(probs).item()
+            label_idx = torch.argmax(probs).item() # without item() it will return a tensor so item returns a number
             labels = ["entailment", "neutral", "contradiction"]
             predicted_label = labels[label_idx]
 
-            # Map the result to a binary decision: S (Supported) or NS (Not Supported)
+            # Map the result to a binary decision: S or NS
             if predicted_label == "entailment":
                 return "S"
             else:
@@ -96,41 +96,30 @@ class AlwaysEntailedFactChecker(FactChecker):
 class WordRecallThresholdFactChecker(FactChecker):
     def __init__(self, threshold=0.6):
         """
-        Initialize the fact checker with a specific recall threshold.
-        :param threshold: The recall threshold for deciding "S" (Supported) vs "NS" (Not Supported)
+        Initialize the fact checker with a specific threshold for deciding
+        "S" (Supported) vs "NS" (Not Supported)
         """
         self.threshold = threshold
         self.nlp = spacy.load("en_core_web_sm")
 
     def preprocess(self, text: str) -> set:
         """
-        Preprocess the input text by tokenizing, lowercasing, and removing stopwords.
-        :param text: The text to preprocess
-        :return: A set of preprocessed words
+        Preprocess the input text by tokenizing, lowercasing, and removing stopwords/punctuation.
         """
-        # Use spaCy to tokenize, lowercase, and filter out stopwords and punctuation
         doc = self.nlp(text)
         words = {token.lemma_.lower() for token in doc if not token.is_stop and not token.is_punct}
         return words
 
     def calculate_jaccard(self, fact_words: set, passage_words: set) -> float:
         """
-        Calculate recall as the fraction of fact words found in the passage.
-        :param fact_words: Set of words from the fact
-        :param passage_words: Set of words from the passage
-        :return: Recall score (float)
+        :return: Jaccard similarity (float)
         """
-        if not fact_words:
-            return 0.0
         intersection = fact_words.intersection(passage_words)
         return len(intersection) / len(fact_words)
 
     def predict(self, fact: str, passages: List[dict]) -> str:
         """
         Predict whether the fact is supported or not based on word recall.
-        :param fact: A string representing the fact
-        :param passages: A list of passage dictionaries with "text" content
-        :return: "S" if supported, otherwise "NS"
         """
         fact_words = self.preprocess(fact)
         for passage in passages:
@@ -144,15 +133,15 @@ class WordRecallThresholdFactChecker(FactChecker):
 
 class EntailmentFactChecker(FactChecker):
     def __init__(self, ent_model):
-        self.ent_model = ent_model
+        self.ent_model = ent_model # roberta_ent_model
 
     def predict(self, fact: str, passages: List[dict]) -> str:
         max_score = float('-inf')
-        final_label = "NS"  # Default to "NS" (Not Supported)
+        final_label = "NS"  # default unless supported
         
         for passage in passages:
             text = passage["text"]
-            sentences = text.split(".")  # Split the text into sentences
+            sentences = text.split(".")
             
             for sentence in sentences:
                 sentence = sentence.strip()  # Clean up any extra spaces
@@ -160,7 +149,7 @@ class EntailmentFactChecker(FactChecker):
                 result = self.ent_model.check_entailment(sentence, fact)
                 if result == "S":
                     final_label = "S"  # If any sentence supports the fact, set it as supported
-                    break  # No need to continue checking other sentences
+                    break  # No need to check other sentences
 
         return final_label
 
