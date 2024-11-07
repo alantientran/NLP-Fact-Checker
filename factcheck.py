@@ -45,9 +45,19 @@ class EntailmentModel(object):
         # Note that the labels are ["entailment", "neutral", "contradiction"]. There are a number of ways to map
         # these logits or probabilities to classification decisions; you'll have to decide how you want to do this.
 
-        # Extract probabilities for entailment, neutral, and contradiction
-        probs = torch.softmax(logits, dim=-1).cpu().numpy().flatten()
-        entailment_prob = probs[0]  # Assuming entailment is the first class
+        # Get probabilities using softmax
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+
+            # Find the maximum probability label
+            label_idx = torch.argmax(probs).item()
+            labels = ["entailment", "neutral", "contradiction"]
+            predicted_label = labels[label_idx]
+
+            # Map the result to a binary decision: S (Supported) or NS (Not Supported)
+            if predicted_label == "entailment":
+                return "S"
+            else:
+                return "NS"
 
         # To prevent out-of-memory (OOM) issues during autograding, we explicitly delete
         # objects inputs, outputs, logits, and any results that are no longer needed after the computation.
@@ -133,42 +143,26 @@ class WordRecallThresholdFactChecker(FactChecker):
         return "NS"
 
 class EntailmentFactChecker(FactChecker):
-    def __init__(self, ent_model, entailment_threshold=0.8):
-        """
-        :param ent_model: Pre-trained entailment model (DeBERTa fine-tuned on MNLI, FEVER, etc.)
-        :param entailment_threshold: Probability threshold for classifying a sentence as entailed
-        """
+    def __init__(self, ent_model):
         self.ent_model = ent_model
-        self.entailment_threshold = entailment_threshold
 
     def predict(self, fact: str, passages: List[dict]) -> str:
-        # Tokenize and split the fact into sentences using simple heuristics
-        best_score = 0.0  # To keep track of the maximum entailment probability
+        max_score = float('-inf')
+        final_label = "NS"  # Default to "NS" (Not Supported)
+        
         for passage in passages:
-            # Split passage into sentences for finer entailment checking
-            sentences = self.split_into_sentences(passage['text'])
+            text = passage["text"]
+            sentences = text.split(".")  # Split the text into sentences
+            
             for sentence in sentences:
-                # Get entailment probability for the sentence-fact pair
-                entailment_prob = self.ent_model.check_entailment(sentence, fact)
-                
-                # Track the highest entailment probability across all sentences in all passages
-                best_score = max(best_score, entailment_prob)
+                sentence = sentence.strip()  # Clean up any extra spaces
+                # Get the entailment result for this sentence vs the fact
+                result = self.ent_model.check_entailment(sentence, fact)
+                if result == "S":
+                    final_label = "S"  # If any sentence supports the fact, set it as supported
+                    break  # No need to continue checking other sentences
 
-        # Classify based on max entailment score across all sentence pairs
-        if best_score >= self.entailment_threshold:
-            return "S"  # Supported
-        else:
-            return "NS"  # Not Supported
-
-    def split_into_sentences(self, text):
-        """
-        Utility function to split a passage into sentences.
-        """
-        # For simplicity, let's use basic punctuation as sentence boundaries
-        sentences = text.split('. ')
-        return [sentence.strip() for sentence in sentences if sentence]
-
-
+        return final_label
 
 # OPTIONAL
 class DependencyRecallThresholdFactChecker(FactChecker):
