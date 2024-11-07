@@ -3,8 +3,6 @@
 import torch
 from typing import List
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import spacy
 import gc
 
@@ -86,42 +84,53 @@ class AlwaysEntailedFactChecker(FactChecker):
 
 
 class WordRecallThresholdFactChecker(FactChecker):
-    def __init__(self, threshold=0.21):
-        self.threshold = threshold  # similarity threshold for classification
-        self.nlp = spacy.load('en_core_web_sm')  # load spacy for preprocessing
-        self.vectorizer = TfidfVectorizer()
+    def __init__(self, threshold=0.6):
+        """
+        Initialize the fact checker with a specific recall threshold.
+        :param threshold: The recall threshold for deciding "S" (Supported) vs "NS" (Not Supported)
+        """
+        self.threshold = threshold
+        self.nlp = spacy.load("en_core_web_sm")
 
-    
-    def preprocess(self, text):
-        # Tokenize and remove stopwords and punctuation, optionally apply lemmatization
-        doc = self.nlp(text.lower())
-        processed_tokens = [token.lemma_ for token in doc if not token.is_stop and not token.is_punct] 
-        return " ".join(processed_tokens)
+    def preprocess(self, text: str) -> set:
+        """
+        Preprocess the input text by tokenizing, lowercasing, and removing stopwords.
+        :param text: The text to preprocess
+        :return: A set of preprocessed words
+        """
+        # Use spaCy to tokenize, lowercase, and filter out stopwords and punctuation
+        doc = self.nlp(text)
+        words = {token.lemma_.lower() for token in doc if not token.is_stop and not token.is_punct}
+        return words
 
-    def calculate_similarity(self, fact, passage):
-        # Calculate TF-IDF vectors and cosine similarity
-        tfidf_matrix = self.vectorizer.fit_transform([fact, passage]) 
-        similarity = cosine_similarity(tfidf_matrix[0], tfidf_matrix[1])[0][0]
-        return similarity
+    def calculate_jaccard(self, fact_words: set, passage_words: set) -> float:
+        """
+        Calculate recall as the fraction of fact words found in the passage.
+        :param fact_words: Set of words from the fact
+        :param passage_words: Set of words from the passage
+        :return: Recall score (float)
+        """
+        if not fact_words:
+            return 0.0
+        intersection = fact_words.intersection(passage_words)
+        return len(intersection) / len(fact_words)
 
     def predict(self, fact: str, passages: List[dict]) -> str:
-        # Preprocess the fact
-        processed_fact = self.preprocess(fact)
-        
-        # Initialize a list to store similarity scores
-        similarities = []
-        
-        # Check each passage for similarity to the fact
+        """
+        Predict whether the fact is supported or not based on word recall.
+        :param fact: A string representing the fact
+        :param passages: A list of passage dictionaries with "text" content
+        :return: "S" if supported, otherwise "NS"
+        """
+        fact_words = self.preprocess(fact)
         for passage in passages:
-            processed_passage = self.preprocess(passage['text'])
-            similarity = self.calculate_similarity(processed_fact, processed_passage)
-            similarities.append(similarity)
-        
-        # Determine if any passage similarity exceeds the threshold
-        if max(similarities) >= self.threshold:
-            return "S"
-        else:
-            return "NS"
+            passage_words = self.preprocess(passage['text'])
+            recall_score = self.calculate_jaccard(fact_words, passage_words)
+            
+            # If any passage meets the threshold, classify as "Supported"
+            if recall_score >= self.threshold:
+                return "S"
+        return "NS"
 
 class EntailmentFactChecker(FactChecker):
     def __init__(self, ent_model, entailment_threshold=0.8):
